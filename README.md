@@ -123,6 +123,19 @@ To render a copy of a video with per-segment overlays, run:
 python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu
 ```
 This writes a new video next to the input with a suffix added to the filename, overlays the current segment index (`i/n`), colors the frame border by segment, and appends a full-video segment progress bar.
+If the video is over-segmented, try increasing `--min_interval`, for example:
+```commandline
+python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --min_interval 60
+```
+To enforce a hard upper bound after decomposition, use:
+```commandline
+python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --max_segments 10
+```
+To keep only the strongest milestone candidates instead of merging short segments, use:
+```commandline
+python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --max_segments 10 --selection_mode topk
+```
+This `topk` mode keeps milestone candidates with the strongest smoothed distance-curve peaks while enforcing spacing with `--min_interval`.
 
 ## Simulation Data
 
