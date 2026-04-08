@@ -118,6 +118,12 @@ python demo.py
 ```
 to host a Gradio demo locally with different choices of visual representations. 
 
+To render a copy of a video with per-segment overlays, run:
+```commandline
+python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu
+```
+This writes a new video next to the input with a suffix added to the filename, overlays the current segment index (`i/n`), colors the frame border by segment, and appends a full-video segment progress bar.
+
 ## Simulation Data
 
 We post-processed the data released from original [Relay-Policy-Learning](https://github.com/google-research/relay-policy-learning/tree/master) that keeps the successful trajectories only and adapt the control and observations used in our paper by:
