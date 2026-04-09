@@ -60,6 +60,16 @@ def parse_args():
         help="Frozen visual encoder used for segmentation.",
     )
     parser.add_argument(
+        "--segmentation_algorithm",
+        default="uvd",
+        choices=["uvd", "reward_curve"],
+        help=(
+            "Boundary generation algorithm. "
+            "'uvd' uses the repo's decomposition logic; "
+            "'reward_curve' uses smoothed final-frame-distance peaks/valleys."
+        ),
+    )
+    parser.add_argument(
         "--device",
         default="cpu",
         help='Inference device. Defaults to "cpu" to avoid GPU memory pressure.',
@@ -136,6 +146,42 @@ def parse_args():
         "--normalize_curve",
         action="store_true",
         help="Enable distance-curve normalization before decomposition.",
+    )
+    parser.add_argument(
+        "--extrema_prominence",
+        type=float,
+        default=None,
+        help=(
+            "Minimum prominence for UVD extrema candidates. "
+            "Higher values suppress weak peaks before milestone selection."
+        ),
+    )
+    parser.add_argument(
+        "--reward_smooth_kernel",
+        type=int,
+        default=5,
+        help="Moving-average kernel size for reward_curve segmentation.",
+    )
+    parser.add_argument(
+        "--reward_prominence",
+        type=float,
+        default=0.1,
+        help="Peak/valley prominence for reward_curve segmentation.",
+    )
+    parser.add_argument(
+        "--reward_min_segment_len",
+        type=int,
+        default=10,
+        help="Minimum segment length in frames for reward_curve segmentation.",
+    )
+    parser.add_argument(
+        "--embed_batch_size",
+        type=int,
+        default=64,
+        help=(
+            "Number of frames per embedding batch. "
+            "Lower this if CPU or GPU memory is insufficient."
+        ),
     )
     parser.add_argument(
         "--max_segments",
@@ -273,8 +319,9 @@ def compute_milestone_scores(
     window_length: int | None,
     smooth_method: str | None,
     gamma: float,
+    extrema_prominence: float | None,
 ) -> dict[int, float]:
-    from scipy.signal import argrelextrema, savgol_filter
+    from scipy.signal import argrelextrema, peak_prominences, savgol_filter
 
     from uvd.decomp.kernel_reg import KernelRegression
 
@@ -314,6 +361,9 @@ def compute_milestone_scores(
             distance_smoothed = distances
 
         extrema_indices = argrelextrema(distance_smoothed, np.greater)[0]
+        if extrema_prominence is not None and len(extrema_indices) > 0:
+            prominences = peak_prominences(distance_smoothed, extrema_indices)[0]
+            extrema_indices = extrema_indices[prominences >= extrema_prominence]
         x_extrema = x[extrema_indices]
 
         update_goal = False
@@ -336,6 +386,63 @@ def compute_milestone_scores(
         ]
 
     return milestone_scores
+
+
+def compute_reward_curve_milestones(
+    embeddings: np.ndarray,
+    smooth_kernel: int,
+    prominence: float,
+    min_segment_len: int,
+) -> np.ndarray:
+    from scipy.signal import find_peaks
+
+    goal_embedding = embeddings[-1]
+    distances = np.linalg.norm(embeddings - goal_embedding, axis=1)
+    if len(distances) == 0:
+        return np.array([], dtype=np.int64)
+    distances = distances / max(float(distances[0]), 1e-8)
+
+    kernel = max(1, int(smooth_kernel))
+    kernel_arr = np.ones(kernel, dtype=np.float32) / kernel
+    distances_smooth = np.convolve(distances, kernel_arr, mode="same")
+
+    peaks, _ = find_peaks(distances_smooth, prominence=prominence)
+    valleys, _ = find_peaks(-distances_smooth, prominence=prominence)
+    idxs = sorted(peaks.tolist() + valleys.tolist())
+
+    filtered_idxs = []
+    for idx in idxs:
+        if filtered_idxs and idx - filtered_idxs[-1] == 1:
+            continue
+        filtered_idxs.append(idx)
+
+    boundaries = [0] + filtered_idxs + [len(distances)]
+    filtered_boundaries = [boundaries[0]]
+    for boundary in boundaries[1:]:
+        if boundary - filtered_boundaries[-1] >= min_segment_len:
+            filtered_boundaries.append(boundary)
+        elif boundary == len(distances):
+            filtered_boundaries[-1] = boundary
+
+    return np.array([boundary - 1 for boundary in filtered_boundaries[1:]], dtype=np.int64)
+
+
+def compute_embeddings_in_batches(preprocessor, frames: np.ndarray, batch_size: int) -> np.ndarray:
+    batch_size = max(1, int(batch_size))
+    outputs = []
+    total = len(frames)
+    batch_iter = range(0, total, batch_size)
+    if tqdm is not None:
+        batch_iter = tqdm(
+            batch_iter,
+            total=(total + batch_size - 1) // batch_size,
+            desc="Embedding batches",
+            unit="batch",
+        )
+    for start in batch_iter:
+        end = min(start + batch_size, total)
+        outputs.append(preprocessor.process(frames[start:end], return_numpy=True))
+    return np.concatenate(outputs, axis=0)
 
 
 def draw_border(frame: np.ndarray, color: tuple[int, int, int], border_size: int) -> np.ndarray:
@@ -507,24 +614,45 @@ def main():
     )
 
     print(
-        f"[3/5] Running UVD segmentation on {args.device} with "
-        f"preprocessor={args.preprocessor_name}",
+        f"[3/5] Running {args.segmentation_algorithm} segmentation on {args.device} "
+        f"with preprocessor={args.preprocessor_name}",
         flush=True,
     )
     preprocessor = uvd.get_preprocessor(args.preprocessor_name, device=args.device)
-    rep = preprocessor.process(frames, return_numpy=True)
-    smooth_method = None if args.smooth_method == "none" else args.smooth_method
-    _, decomp_meta = uvd.decomp_trajectories(
-        "embed",
-        rep,
-        normalize_curve=args.normalize_curve,
-        min_interval=args.min_interval,
-        smooth_method=smooth_method,
-        gamma=args.gamma,
-        window_length=args.window_length,
+    print(
+        f"[3/5] Computing embeddings in batches of {args.embed_batch_size}",
+        flush=True,
     )
-    raw_indices = np.array(decomp_meta.milestone_indices, dtype=np.int64)
-    if args.selection_mode == "topk":
+    rep = compute_embeddings_in_batches(
+        preprocessor,
+        frames,
+        batch_size=args.embed_batch_size,
+    )
+    smooth_method = None if args.smooth_method == "none" else args.smooth_method
+    if args.segmentation_algorithm == "reward_curve":
+        raw_indices = compute_reward_curve_milestones(
+            rep,
+            smooth_kernel=args.reward_smooth_kernel,
+            prominence=args.reward_prominence,
+            min_segment_len=args.reward_min_segment_len,
+        )
+        milestone_scores = {
+            int(idx): float(np.linalg.norm(rep[idx] - rep[-1])) for idx in raw_indices
+        }
+        if len(raw_indices) > 0:
+            milestone_scores[int(raw_indices[-1])] = float("inf")
+    else:
+        _, decomp_meta = uvd.decomp_trajectories(
+            "embed",
+            rep,
+            normalize_curve=args.normalize_curve,
+            min_interval=args.min_interval,
+            smooth_method=smooth_method,
+            extrema_prominence=args.extrema_prominence,
+            gamma=args.gamma,
+            window_length=args.window_length,
+        )
+        raw_indices = np.array(decomp_meta.milestone_indices, dtype=np.int64)
         milestone_scores = compute_milestone_scores(
             rep,
             normalize_curve=args.normalize_curve,
@@ -532,7 +660,9 @@ def main():
             window_length=args.window_length,
             smooth_method=smooth_method,
             gamma=args.gamma,
+            extrema_prominence=args.extrema_prominence,
         )
+    if args.selection_mode == "topk":
         indices = select_topk_segments(
             raw_indices,
             milestone_scores=milestone_scores,

@@ -127,6 +127,7 @@ If the video is over-segmented, try increasing `--min_interval`, for example:
 ```commandline
 python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --min_interval 60
 ```
+For UVD segmentation, you can also suppress weak extrema before milestone selection with `--extrema_prominence`.
 To enforce a hard upper bound after decomposition, use:
 ```commandline
 python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --max_segments 10
@@ -136,6 +137,11 @@ To keep only the strongest milestone candidates instead of merging short segment
 python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --max_segments 10 --selection_mode topk
 ```
 This `topk` mode keeps milestone candidates with the strongest smoothed distance-curve peaks while enforcing spacing with `--min_interval`.
+To use the simpler reward-curve segmentation algorithm instead of UVD's recursive decomposition, use:
+```commandline
+python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --segmentation_algorithm reward_curve
+```
+If embedding all frames at once is too memory-heavy, lower `--embed_batch_size`, for example `--embed_batch_size 16`.
 
 ## Simulation Data
 

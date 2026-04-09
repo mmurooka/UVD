@@ -8,7 +8,7 @@ import torch
 import wandb
 from matplotlib import pyplot as plt
 from scipy.signal import medfilt
-from scipy.signal import savgol_filter, argrelextrema
+from scipy.signal import savgol_filter, argrelextrema, peak_prominences
 
 import uvd.utils as U
 from uvd.decomp.kernel_reg import KernelRegression
@@ -332,6 +332,7 @@ def embedding_decomp(
     min_interval: int = 18,
     window_length: int | None = None,
     smooth_method: Literal["kernel", "savgol"] = "kernel",
+    extrema_prominence: float | None = None,
     extrema_comparator: Callable = np.greater,
     fill_embeddings: bool = True,
     return_intermediate_curves: bool = False,
@@ -384,6 +385,9 @@ def embedding_decomp(
             iter_curves.append(distance_smoothed)
 
         extrema_indices = argrelextrema(distance_smoothed, extrema_comparator)[0]
+        if extrema_prominence is not None and len(extrema_indices) > 0:
+            prominences = peak_prominences(distance_smoothed, extrema_indices)[0]
+            extrema_indices = extrema_indices[prominences >= extrema_prominence]
         x_extrema = x[extrema_indices]
 
         update_goal = False
@@ -616,6 +620,7 @@ DEFAULT_DECOMP_KWARGS = dict(
         min_interval=18,
         smooth_method="kernel",
         gamma=0.08,
+        extrema_prominence=None,
     ),
     embed_no_robot=dict(
         window_length=8,
