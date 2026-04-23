@@ -118,34 +118,146 @@ python demo.py
 ```
 to host a Gradio demo locally with different choices of visual representations. 
 
-To render a copy of a video with per-segment overlays, run:
+## Segmentation Scripts
+
+### `scripts/segment_video.py`
+
+Run video segmentation and write an annotated output video with:
+
 ```commandline
-python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu
+python scripts/segment_video.py /PATH/TO/VIDEO
 ```
-This writes a new video next to the input with a suffix added to the filename, overlays the current segment index (`i/n`), colors the frame border by segment, and appends a full-video segment progress bar.
-If the video is over-segmented, try increasing `--min_interval`, for example:
+
+This writes:
+
+- a `segments/` subdirectory next to the input video
+- an annotated output video in that directory, with a suffix added to the filename
+- a YAML file in that directory containing the absolute input video path, segmentation algorithm, segmentation parameters, and boundary times in seconds
+- a `.npy` embedding cache in that directory, unless `--no_embedding_cache` is used
+
+The output video overlays the current segment index (`i/n`), colors the frame border by segment, and appends a full-video segment progress bar.
+
+Available segmentation backends are:
+
+- `uvd`
+- `goal_distance`
+- `window_mean`
+- `kernel_cpd`
+- `hmm`
+- `hsmm`
+
+Examples:
+
 ```commandline
-python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --min_interval 60
+python scripts/segment_video.py /PATH/TO/VIDEO --segmentation_algorithm uvd
+python scripts/segment_video.py /PATH/TO/VIDEO --segmentation_algorithm goal_distance
+python scripts/segment_video.py /PATH/TO/VIDEO --segmentation_algorithm window_mean
+python scripts/segment_video.py /PATH/TO/VIDEO --segmentation_algorithm kernel_cpd
+python scripts/segment_video.py /PATH/TO/VIDEO --segmentation_algorithm hmm
+python scripts/segment_video.py /PATH/TO/VIDEO --segmentation_algorithm hsmm
 ```
-For UVD segmentation, you can also suppress weak extrema before milestone selection with `--extrema_prominence`.
-To enforce a hard upper bound after decomposition, use:
+
+Common controls:
+
+- `--preprocessor_name`
+- `--device`
+- `--embed_batch_size`
+- `--embedding_cache`
+- `--no_embedding_cache`
+
+UVD-specific controls:
+
+- `--uvd_smooth_method`
+- `--uvd_gamma`
+- `--uvd_window_length`
+- `--uvd_normalize_curve`
+- `--uvd_min_interval`
+- `--uvd_extrema_prominence`
+
+`goal_distance` controls:
+
+- `--goal_distance_smooth_kernel`
+- `--goal_distance_prominence`
+- `--goal_distance_min_segment_len`
+
+`window_mean` controls:
+
+- `--window_mean_window`
+- `--window_mean_prominence`
+- `--window_mean_min_segment_len`
+
+`kernel_cpd` controls:
+
+- `--kernel_cpd_window`
+- `--kernel_cpd_gamma`
+- `--kernel_cpd_prominence`
+- `--kernel_cpd_min_segment_len`
+
+`hmm` controls:
+
+- `--hmm_num_states`
+- `--hmm_stay_bias`
+- `--hmm_min_segment_len`
+
+`hsmm` controls:
+
+- `--hsmm_num_states`
+- `--hsmm_switch_cost`
+- `--hsmm_min_duration`
+- `--hsmm_max_duration`
+
+Rendering-specific controls:
+
+- `--render_suffix`
+- `--render_fps`
+- `--render_border_size`
+- `--render_progress_height`
+- `--render_font_scale`
+- `--render_text_thickness`
+
+By default, frame embeddings are cached as a `.npy` file under the sibling `segments/` directory and automatically reused across backends, tuning, and re-runs. To override the cache path:
+
 ```commandline
-python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --max_segments 10
+python scripts/segment_video.py /PATH/TO/VIDEO --embedding_cache /PATH/TO/CACHE.npy
 ```
-To keep only the strongest milestone candidates instead of merging short segments, use:
+
+To disable cache load/save:
+
 ```commandline
-python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --max_segments 10 --selection_mode topk
+python scripts/segment_video.py /PATH/TO/VIDEO --no_embedding_cache
 ```
-This `topk` mode keeps milestone candidates with the strongest smoothed distance-curve peaks while enforcing spacing with `--min_interval`.
-To use the simpler reward-curve segmentation algorithm instead of UVD's recursive decomposition, use:
-```commandline
-python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --segmentation_algorithm reward_curve
-```
+
 If embedding all frames at once is too memory-heavy, lower `--embed_batch_size`, for example `--embed_batch_size 16`.
-To interactively tune UVD segmentation parameters without re-embedding or rendering videos, use:
+
+### `scripts/tune_segmentation_params.py`
+
+Interactively tune segmentation parameters without re-embedding or rendering videos:
+
 ```commandline
-python scripts/tune_segmentation_params.py /PATH/TO/VIDEO --device cpu
+python scripts/tune_segmentation_params.py /PATH/TO/VIDEO --segmentation_algorithm uvd
 ```
+
+Examples:
+
+```commandline
+python scripts/tune_segmentation_params.py /PATH/TO/VIDEO --segmentation_algorithm goal_distance
+python scripts/tune_segmentation_params.py /PATH/TO/VIDEO --segmentation_algorithm window_mean
+python scripts/tune_segmentation_params.py /PATH/TO/VIDEO --segmentation_algorithm kernel_cpd
+python scripts/tune_segmentation_params.py /PATH/TO/VIDEO --segmentation_algorithm hmm
+python scripts/tune_segmentation_params.py /PATH/TO/VIDEO --segmentation_algorithm hsmm
+```
+
+The tuner reuses the same embedding cache used by `scripts/segment_video.py`.
+
+The tuning UI provides:
+
+- a current-frame image preview
+- a frame slider and graph click-to-jump
+- `final_goal` / `segment_goal` curve display switching
+- parameter sliders for the selected backend
+- an `Update` button or `Enter` key to recompute boundaries
+
+Most segmentation options are shared with `scripts/segment_video.py`. The tuner omits rendering-only options such as output suffix, overlay font settings, border thickness, and progress bar height.
 
 ## Simulation Data
 
