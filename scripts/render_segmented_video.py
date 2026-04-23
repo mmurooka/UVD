@@ -20,12 +20,17 @@ ImageDraw = None
 ImageFont = None
 
 
-def import_rendering_dependencies():
-    global np, Image, ImageColor, ImageDraw, ImageFont
+def import_numpy_dependency():
+    global np
     if np is None:
         import numpy as _np
 
         np = _np
+
+
+def import_rendering_dependencies():
+    global Image, ImageColor, ImageDraw, ImageFont
+    import_numpy_dependency()
     if Image is None:
         from PIL import Image as _Image
         from PIL import ImageColor as _ImageColor
@@ -112,7 +117,7 @@ def parse_args():
     parser.add_argument(
         "--min_interval",
         type=int,
-        default=18,
+        default=1,
         help=(
             "Minimum distance between neighboring segmentation milestones in frames. "
             "Increase this to reduce over-segmentation."
@@ -222,6 +227,7 @@ def palette(n: int) -> list[tuple[int, int, int]]:
 
 
 def assign_segments(num_frames: int, milestone_indices: Iterable[int]) -> np.ndarray:
+    import_numpy_dependency()
     milestones = np.array(sorted(set(int(i) for i in milestone_indices)), dtype=np.int64)
     if milestones.size == 0:
         milestones = np.array([num_frames - 1], dtype=np.int64)
@@ -241,6 +247,7 @@ def limit_segment_count(
     num_frames: int,
     max_segments: int | None,
 ) -> np.ndarray:
+    import_numpy_dependency()
     milestones = np.array(sorted(set(int(i) for i in milestone_indices)), dtype=np.int64)
     if milestones.size == 0 or milestones[-1] != num_frames - 1:
         milestones = np.concatenate([milestones, [num_frames - 1]])
@@ -279,6 +286,7 @@ def select_topk_segments(
     max_segments: int | None,
     min_interval: int,
 ) -> np.ndarray:
+    import_numpy_dependency()
     milestones = np.array(sorted(set(int(i) for i in milestone_indices)), dtype=np.int64)
     if (
         max_segments is None
@@ -321,6 +329,7 @@ def compute_milestone_scores(
     gamma: float,
     extrema_prominence: float | None,
 ) -> dict[int, float]:
+    import_numpy_dependency()
     from scipy.signal import argrelextrema, peak_prominences, savgol_filter
 
     from uvd.decomp.kernel_reg import KernelRegression
@@ -394,6 +403,7 @@ def compute_reward_curve_milestones(
     prominence: float,
     min_segment_len: int,
 ) -> np.ndarray:
+    import_numpy_dependency()
     from scipy.signal import find_peaks
 
     goal_embedding = embeddings[-1]
@@ -428,6 +438,7 @@ def compute_reward_curve_milestones(
 
 
 def compute_embeddings_in_batches(preprocessor, frames: np.ndarray, batch_size: int) -> np.ndarray:
+    import_numpy_dependency()
     batch_size = max(1, int(batch_size))
     outputs = []
     total = len(frames)

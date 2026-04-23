@@ -142,6 +142,10 @@ To use the simpler reward-curve segmentation algorithm instead of UVD's recursiv
 python scripts/render_segmented_video.py /PATH/TO/VIDEO --device cpu --segmentation_algorithm reward_curve
 ```
 If embedding all frames at once is too memory-heavy, lower `--embed_batch_size`, for example `--embed_batch_size 16`.
+To interactively tune UVD segmentation parameters without re-embedding or rendering videos, use:
+```commandline
+python scripts/tune_segmentation_params.py /PATH/TO/VIDEO --device cpu
+```
 
 ## Simulation Data
 
