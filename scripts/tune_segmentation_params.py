@@ -5,7 +5,7 @@ import os
 from dataclasses import replace
 
 import numpy as np
-import segmentation_pipeline as sp
+import segmentation_common as sp
 
 
 SLIDER_SPEC_BUILDERS = {

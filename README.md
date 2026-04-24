@@ -132,7 +132,7 @@ This writes:
 
 - a `segments/` subdirectory next to the input video
 - an annotated output video in that directory, with a suffix added to the filename
-- a YAML file in that directory containing the absolute input video path, segmentation algorithm, segmentation parameters, and boundary times in seconds
+- a YAML file in that directory containing the absolute input video path, segmentation algorithm, segmentation parameters, and boundary times in seconds from `0.0` through the final video end time
 - a `.npy` embedding cache in that directory, unless `--no_embedding_cache` is used
 
 The output video overlays the current segment index (`i/n`), colors the frame border by segment, and appends a full-video segment progress bar.
@@ -280,6 +280,53 @@ The tuning UI provides:
 - an `Update` button or `Enter` key to recompute boundaries
 
 Most segmentation options are shared with `scripts/segment_video.py`. The tuner omits rendering-only options such as output suffix, overlay font settings, border thickness, and progress bar height.
+
+### `scripts/annotate_compliance_segments.py`
+
+Annotate per-segment compliance values with GPT.
+The input YAML must contain `video_path` and `boundaries_sec`.
+
+```commandline
+python scripts/annotate_compliance_segments.py /PATH/TO/segments/demo.segments.yaml --task_description "The robot grasps and lifts a tray, then a human places and later removes an object on the tray."
+```
+
+The script predicts four binary values for each segment:
+
+- `xy_compliance`
+- `z_compliance`
+- `rpy_compliance`
+- `posture_compliance`
+
+Useful options:
+
+```commandline
+--model gpt-5.4
+--frame_jpeg_quality 90
+--render_suffix .annotated_compliance
+```
+
+The script writes:
+
+- a YAML file with `segment_annotations`
+- a JSON file with raw GPT outputs and reasons
+- an annotated video in the sibling `segments/` directory
+
+The annotated video layout is:
+
+- top: original video without an outer border
+- bottom: four rows of compliance timelines for `xy`, `z`, `rpy`, and `posture`
+- a vertical line indicating the current time
+
+Input YAML example:
+
+```yaml
+video_path: /abs/path/demo.mp4
+boundaries_sec:
+  - 0.0
+  - 2.4
+  - 5.1
+  - 8.7
+```
 
 ## Simulation Data
 
