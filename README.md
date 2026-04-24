@@ -229,6 +229,28 @@ python scripts/segment_video.py /PATH/TO/VIDEO --no_embedding_cache
 
 If embedding all frames at once is too memory-heavy, lower `--embed_batch_size`, for example `--embed_batch_size 16`.
 
+### `scripts/segment_all_videos.sh`
+
+Recursively find `{camera_name}_rgb_image.rmb.mp4` files and run `scripts/segment_video.py` on each match:
+
+```commandline
+bash scripts/segment_all_videos.sh /PATH/TO/DATASET
+```
+
+Defaults:
+
+- `camera_name=front`
+- `ROOT_DIR=.` if omitted
+
+Examples:
+
+```commandline
+bash scripts/segment_all_videos.sh /PATH/TO/DATASET --camera_name wrist
+bash scripts/segment_all_videos.sh /PATH/TO/DATASET -- --segmentation_algorithm kernel_cpd
+```
+
+Arguments after `--` are forwarded to `scripts/segment_video.py`.
+
 ### `scripts/tune_segmentation_params.py`
 
 Interactively tune segmentation parameters without re-embedding or rendering videos:
