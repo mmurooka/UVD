@@ -56,6 +56,11 @@ def parse_args():
         help="JPEG quality for uploaded frames.",
     )
     parser.add_argument(
+        "--save_prompt_images",
+        action="store_true",
+        help="Save the center-frame images sent to the model for debugging.",
+    )
+    parser.add_argument(
         "--render_suffix",
         default=".annotated_compliance",
         help="Suffix added before the rendered video extension.",
@@ -73,7 +78,8 @@ def resolve_output_paths(segment_yaml_path: Path, video_path: Path, render_suffi
     output_yaml_path = segment_yaml_path.with_name(f"{segment_yaml_path.stem}_compliance.yaml")
     decision_json_path = output_yaml_path.with_suffix(f"{output_yaml_path.suffix}.json")
     rendered_video_path = Path(rc.build_output_path(str(video_path), render_suffix))
-    return output_yaml_path, decision_json_path, rendered_video_path
+    prompt_image_dir = output_yaml_path.with_name(f"{output_yaml_path.stem}_prompt_images")
+    return output_yaml_path, decision_json_path, rendered_video_path, prompt_image_dir
 
 
 def load_segment_yaml(segment_yaml_path: Path):
@@ -148,6 +154,17 @@ def encode_frame_as_data_url(frame_rgb, jpeg_quality: int) -> str:
     return f"data:image/jpeg;base64,{encoded_b64}"
 
 
+def save_prompt_image(frame_rgb, output_path: Path, jpeg_quality: int) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    ok = cv2.imwrite(
+        str(output_path),
+        cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR),
+        [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality],
+    )
+    if not ok:
+        raise RuntimeError(f"Failed to save prompt image: {output_path}")
+
+
 def extract_json_dict(text: str) -> dict:
     text = text.strip()
     try:
@@ -165,68 +182,32 @@ def ask_gpt_for_segment_annotation(
     model: str,
     task_description: str,
     segment: Segment,
-    start_image_url: str,
     center_image_url: str,
-    end_image_url: str,
 ) -> dict:
     task_text = task_description.strip() or "No extra task description is provided."
     prompt = (
-        "You are labeling compliance settings for a 7-DoF robot manipulator video segment.\n"
-        "At each timestep, the robot is controlled by optimization-based IK toward two targets:\n"
-        "1. end-effector position/orientation target with high weight\n"
-        "2. joint-angle/posture target with lower weight\n"
+        "Judge compliance for a robot manipulator video segment.\n"
         "\n"
-        "Use the images as the primary evidence.\n"
-        "Do not assume future events that are not yet visible.\n"
-        "Do not assume hidden objects, future contact, or task constraints unless they are clearly visible or explicitly described in the task description.\n"
-        "Task description is only weak background context.\n"
-        "Do not use the task description to override what is visible in this segment.\n"
-        "Judge only the current segment and its immediate consequences.\n"
+        "Compliance means whether motion caused by external force is acceptable.\n"
+        "For xy, z, and rpy, judge whether small motion is acceptable.\n"
+        "For posture, judge whether elbow or redundant arm motion is acceptable.\n"
         "\n"
-        "Compliance means: if external force is applied, is it acceptable for the robot to move a little in that direction?\n"
-        "Judge small local yielding, not large motion.\n"
-        "Do not assume the robot will move a lot.\n"
-        "The question is whether slight motion is acceptable or harmful for task success and safety.\n"
+        "Use the image as the primary evidence.\n"
+        "Use the task description together with the image to understand the task and judge appropriate compliance.\n"
+        "Do not assume hidden objects, future events, invisible contacts, or supported payloads unless they are clearly visible or explicitly described.\n"
         "\n"
-        "Label whether the robot may yield to external force during this segment.\n"
-        "Return JSON only with keys:\n"
-        "xy_compliance, z_compliance, rpy_compliance, posture_compliance, reasons.\n"
-        "Each compliance value must be 0 or 1.\n"
+        "Return JSON only with these keys:\n"
+        "xy_compliance, z_compliance, rpy_compliance, posture_compliance, reasons\n"
         "\n"
-        "Interpretation:\n"
-        "- xy_compliance: whether small horizontal end-effector motion may be allowed.\n"
-        "- z_compliance: whether small vertical end-effector motion may be allowed.\n"
-        "- rpy_compliance: whether small end-effector orientation change may be allowed.\n"
-        "- posture_compliance: whether small redundant arm posture change, especially elbow motion, may be allowed.\n"
+        "The compliance values must be consistent with the reasons.\n"
+        "If the reasons say compliance is acceptable, the value must be 1.\n"
+        "If the reasons say compliance is not desirable, the value must be 0.\n"
         "\n"
-        "General principles:\n"
-        "- Choose 0 when even small motion would clearly harm task success, break important contact, spoil precision, create unsafe motion, or create collision risk.\n"
-        "- Choose 1 when small motion is acceptable or helpful for safe contact adaptation, environmental fitting, human interaction, or robustness to disturbance.\n"
-        "- Do not choose 0 only because stiffness seems safer.\n"
-        "- If both stiff and compliant behavior are plausible, prefer 1 unless there is a clear reason for 0.\n"
-        "\n"
-        "For end-effector compliance (xy, z, rpy):\n"
-        "- Consider whether small motion would destabilize grasping, placement, support, insertion, carrying, or tool use.\n"
-        "- Distinguish between the object directly grasped by the robot and another object being supported by it.\n"
-        "- Do not assume a supported payload exists unless it is clearly visible or explicitly described.\n"
-        "\n"
-        "For xy_compliance:\n"
-        "- Choose 0 only when even small lateral motion would clearly break alignment, support, grasping, safety, or controlled contact.\n"
-        "- Small horizontal yielding is often acceptable during human interaction and supported manipulation.\n"
-        "\n"
-        "For z_compliance:\n"
-        "- Choose 0 when even small up/down motion would clearly break support, reduce stable contact, cause insertion failure, unsafe collision, dropping, or bouncing.\n"
-        "\n"
-        "For rpy_compliance:\n"
-        "- Do not choose 0 only because an object is broad, flat, or tray-like.\n"
-        "- Choose 0 only when even small orientation change would clearly cause slipping, toppling, spilling, loss of support, unsafe tool motion, or task failure.\n"
-        "- If another object is being supported on top of the grasped object, orientation stability is often more important.\n"
-        "\n"
-        "For posture_compliance:\n"
-        "- This mainly affects redundant arm posture such as elbow motion while keeping the end-effector target.\n"
-        "- Default posture_compliance should be 1.\n"
-        "- Choose 0 only when even small elbow or upper-arm motion would harm task success or safety.\n"
-        "- Examples include elbow collision risk, obstacle avoidance, narrow workspace constraints, or cases where the arm itself is directly supporting or stabilizing an object or the environment.\n"
+        "Definitions:\n"
+        "xy: small horizontal end-effector motion\n"
+        "z: small vertical end-effector motion\n"
+        "rpy: small orientation change of the end-effector\n"
+        "posture: elbow or redundant arm motion\n"
         "\n"
         f"Task description: {task_text}\n"
         f"Segment time range: {segment.start_sec:.3f} - {segment.end_sec:.3f} sec."
@@ -240,19 +221,9 @@ def ask_gpt_for_segment_annotation(
                     {"type": "input_text", "text": prompt},
                     {
                         "type": "input_text",
-                        "text": "Image 1 is near the start of the segment.",
-                    },
-                    {"type": "input_image", "image_url": start_image_url, "detail": "high"},
-                    {
-                        "type": "input_text",
-                        "text": "Image 2 is near the center of the segment.",
+                        "text": "This image is at the center time of the segment.",
                     },
                     {"type": "input_image", "image_url": center_image_url, "detail": "high"},
-                    {
-                        "type": "input_text",
-                        "text": "Image 3 is near the end of the segment.",
-                    },
-                    {"type": "input_image", "image_url": end_image_url, "detail": "high"},
                 ],
             }
         ],
@@ -280,33 +251,32 @@ def annotate_segments(
     task_description: str,
     segments: list[Segment],
     jpeg_quality: int,
+    prompt_image_dir: Path | None,
 ) -> list[dict]:
     annotations = []
     iterator = segments
     if tqdm is not None:
         iterator = tqdm(iterator, desc="Annotating segments", total=len(segments))
     for segment in iterator:
-        start_rgb, start_idx = read_frame_at_sec(cap, segment.start_sec)
         center_rgb, center_idx = read_frame_at_sec(cap, segment.center_sec)
-        end_sec = max(segment.start_sec, segment.end_sec - 1e-3)
-        end_rgb, end_idx = read_frame_at_sec(cap, end_sec)
+        prompt_image_path = None
+        if prompt_image_dir is not None:
+            prompt_image_path = prompt_image_dir / f"segment_{segment.index:04d}_center.jpg"
+            save_prompt_image(center_rgb, prompt_image_path, jpeg_quality)
         decision = ask_gpt_for_segment_annotation(
             client=client,
             model=model,
             task_description=task_description,
             segment=segment,
-            start_image_url=encode_frame_as_data_url(start_rgb, jpeg_quality),
             center_image_url=encode_frame_as_data_url(center_rgb, jpeg_quality),
-            end_image_url=encode_frame_as_data_url(end_rgb, jpeg_quality),
         )
         annotations.append(
             {
                 "segment_index": segment.index,
                 "start_sec": segment.start_sec,
                 "end_sec": segment.end_sec,
-                "start_frame_idx": start_idx,
                 "center_frame_idx": center_idx,
-                "end_frame_idx": end_idx,
+                "prompt_image_path": str(prompt_image_path) if prompt_image_path is not None else None,
                 **decision,
             }
         )
@@ -463,7 +433,7 @@ def main():
     args = parse_args()
     segment_yaml_path = Path(args.segment_yaml).expanduser().resolve()
     video_path, boundaries_sec, original_config = load_segment_yaml(segment_yaml_path)
-    output_yaml_path, decision_json_path, rendered_video_path = resolve_output_paths(
+    output_yaml_path, decision_json_path, rendered_video_path, prompt_image_dir = resolve_output_paths(
         segment_yaml_path=segment_yaml_path,
         video_path=video_path,
         render_suffix=args.render_suffix,
@@ -482,6 +452,7 @@ def main():
             task_description=args.task_description,
             segments=segments,
             jpeg_quality=args.frame_jpeg_quality,
+            prompt_image_dir=prompt_image_dir if args.save_prompt_images else None,
         )
     finally:
         cap.release()

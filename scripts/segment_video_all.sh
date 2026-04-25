@@ -9,11 +9,11 @@ SEGMENT_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/segment_video.py"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/segment_all_videos.sh [ROOT_DIR] [--camera_name NAME] [--python_bin PYTHON] [-- <segment_video.py args...>]
+  scripts/segment_video_all.sh [ROOT_DIR] [--camera_name NAME] [--python_bin PYTHON] [-- <segment_video.py args...>]
 
 Examples:
-  scripts/segment_all_videos.sh /path/to/dataset
-  scripts/segment_all_videos.sh /path/to/dataset --camera_name wrist -- --segmentation_algorithm kernel_cpd
+  scripts/segment_video_all.sh /path/to/dataset
+  scripts/segment_video_all.sh /path/to/dataset --camera_name wrist -- --segmentation_algorithm kernel_cpd
 EOF
 }
 

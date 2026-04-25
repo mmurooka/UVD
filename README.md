@@ -229,12 +229,12 @@ python scripts/segment_video.py /PATH/TO/VIDEO --no_embedding_cache
 
 If embedding all frames at once is too memory-heavy, lower `--embed_batch_size`, for example `--embed_batch_size 16`.
 
-### `scripts/segment_all_videos.sh`
+### `scripts/segment_video_all.sh`
 
 Recursively find `{camera_name}_rgb_image.rmb.mp4` files and run `scripts/segment_video.py` on each match:
 
 ```commandline
-bash scripts/segment_all_videos.sh /PATH/TO/DATASET
+bash scripts/segment_video_all.sh /PATH/TO/DATASET
 ```
 
 Defaults:
@@ -245,8 +245,8 @@ Defaults:
 Examples:
 
 ```commandline
-bash scripts/segment_all_videos.sh /PATH/TO/DATASET --camera_name wrist
-bash scripts/segment_all_videos.sh /PATH/TO/DATASET -- --segmentation_algorithm kernel_cpd
+bash scripts/segment_video_all.sh /PATH/TO/DATASET --camera_name wrist
+bash scripts/segment_video_all.sh /PATH/TO/DATASET -- --segmentation_algorithm kernel_cpd
 ```
 
 Arguments after `--` are forwarded to `scripts/segment_video.py`.
@@ -281,13 +281,13 @@ The tuning UI provides:
 
 Most segmentation options are shared with `scripts/segment_video.py`. The tuner omits rendering-only options such as output suffix, overlay font settings, border thickness, and progress bar height.
 
-### `scripts/annotate_compliance_segments.py`
+### `scripts/annotate_compliance.py`
 
 Annotate per-segment compliance values with GPT.
 The input YAML must contain `video_path` and `boundaries_sec`.
 
 ```commandline
-python scripts/annotate_compliance_segments.py /PATH/TO/segments/demo.segments.yaml --task_description "The robot grasps and lifts a tray, then a human places and later removes an object on the tray."
+python scripts/annotate_compliance.py /PATH/TO/segments/demo.segments.yaml --task_description "The robot grasps and lifts a tray, then a human places and later removes an object on the tray."
 ```
 
 The script predicts four binary values for each segment:
@@ -302,6 +302,7 @@ Useful options:
 ```commandline
 --model gpt-5.4
 --frame_jpeg_quality 90
+--save_prompt_images
 --render_suffix .annotated_compliance
 ```
 
@@ -311,11 +312,35 @@ The script writes:
 - a JSON file with raw GPT outputs and reasons
 - an annotated video in the sibling `segments/` directory
 
+With `--save_prompt_images`, the center-frame images sent to GPT are saved next to the input YAML in `<output_yaml_stem>_prompt_images/`.
+
 The annotated video layout is:
 
 - top: original video without an outer border
 - bottom: four rows of compliance timelines for `xy`, `z`, `rpy`, and `posture`
 - a vertical line indicating the current time
+
+### `scripts/annotate_compliance_all.sh`
+
+Recursively find `{camera_name}_rgb_image.rmb.segments.yaml` files and run `scripts/annotate_compliance.py` on each match:
+
+```commandline
+bash scripts/annotate_compliance_all.sh /PATH/TO/DATASET
+```
+
+Defaults:
+
+- `camera_name=front`
+- `ROOT_DIR=.` if omitted
+
+Examples:
+
+```commandline
+bash scripts/annotate_compliance_all.sh /PATH/TO/DATASET --camera_name wrist
+bash scripts/annotate_compliance_all.sh /PATH/TO/DATASET -- --task_description "The robot manipulates an object near obstacles."
+```
+
+Arguments after `--` are forwarded to `scripts/annotate_compliance.py`.
 
 Input YAML example:
 
