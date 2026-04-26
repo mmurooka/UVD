@@ -24,6 +24,7 @@ SEGMENTATION_ALGORITHM_CHOICES = [
     "hsmm",
 ]
 SMOOTH_METHOD_CHOICES = ["kernel", "savgol", "none"]
+OUTPUT_DIR_NAME = "automatic_annotation"
 
 
 @dataclass(frozen=True)
@@ -228,7 +229,7 @@ def add_common_cli_args(
         default=defaults["embedding_cache"],
         help=(
             "Optional path to a .npy embedding cache. "
-            "Defaults to a file under the sibling segments/ directory."
+            f"Defaults to a file under the sibling {OUTPUT_DIR_NAME}/ directory."
         ),
     )
     common.add_argument(
@@ -433,8 +434,8 @@ def build_embedding_cache_path(
     video_file = os.path.expandvars(os.path.expanduser(video_file))
     video_dir = os.path.dirname(video_file)
     video_name = os.path.splitext(os.path.basename(video_file))[0]
-    segments_dir = os.path.join(video_dir, "segments")
-    return os.path.join(segments_dir, f"{video_name}.embeddings_{preprocessor_name}.npy")
+    output_dir = os.path.join(video_dir, OUTPUT_DIR_NAME)
+    return os.path.join(output_dir, f"{video_name}.embeddings_{preprocessor_name}.npy")
 
 
 def palette(n: int) -> list[tuple[int, int, int]]:

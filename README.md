@@ -130,7 +130,7 @@ python scripts/segment_video.py /PATH/TO/VIDEO
 
 This writes:
 
-- a `segments/` subdirectory next to the input video
+- an `automatic_annotation/` subdirectory next to the input video
 - an annotated output video in that directory, with a suffix added to the filename
 - a YAML file in that directory containing the absolute input video path, segmentation algorithm, segmentation parameters, and boundary times in seconds from `0.0` through the final video end time
 - a `.npy` embedding cache in that directory, unless `--no_embedding_cache` is used
@@ -215,7 +215,7 @@ Rendering-specific controls:
 - `--render_font_scale`
 - `--render_text_thickness`
 
-By default, frame embeddings are cached as a `.npy` file under the sibling `segments/` directory and automatically reused across backends, tuning, and re-runs. To override the cache path:
+By default, frame embeddings are cached as a `.npy` file under the sibling `automatic_annotation/` directory and automatically reused across backends, tuning, and re-runs. To override the cache path:
 
 ```commandline
 python scripts/segment_video.py /PATH/TO/VIDEO --embedding_cache /PATH/TO/CACHE.npy
@@ -287,7 +287,7 @@ Annotate per-segment compliance values with GPT.
 The input YAML must contain `video_path` and `boundaries_sec`.
 
 ```commandline
-python scripts/annotate_compliance.py /PATH/TO/segments/demo.segments.yaml --task_description "The robot grasps and lifts a tray, then a human places and later removes an object on the tray."
+python scripts/annotate_compliance.py /PATH/TO/automatic_annotation/demo.segments.yaml --task_description "The robot grasps and lifts a tray, then a human places and later removes an object on the tray."
 ```
 
 The script predicts four binary values for each segment:
@@ -303,14 +303,14 @@ Useful options:
 --model gpt-5.4
 --frame_jpeg_quality 90
 --save_prompt_images
---render_suffix .annotated_compliance
+--render_suffix .compliance
 ```
 
 The script writes:
 
 - a YAML file with `segment_annotations`
 - a JSON file with raw GPT outputs and reasons
-- an annotated video in the sibling `segments/` directory
+- an annotated video in the sibling `automatic_annotation/` directory
 
 With `--save_prompt_images`, the center-frame images sent to GPT are saved next to the input YAML in `<output_yaml_stem>_prompt_images/`.
 

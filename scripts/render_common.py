@@ -12,6 +12,8 @@ ImageColor = None
 ImageDraw = None
 ImageFont = None
 
+OUTPUT_DIR_NAME = "automatic_annotation"
+
 
 @dataclass(frozen=True)
 class RenderConfig:
@@ -124,7 +126,7 @@ def build_output_path(video_file: str, suffix: str) -> str:
     video_file = os.path.expandvars(os.path.expanduser(video_file))
     video_dir = os.path.dirname(video_file)
     video_name, ext = os.path.splitext(os.path.basename(video_file))
-    output_dir = os.path.join(video_dir, "segments")
+    output_dir = os.path.join(video_dir, OUTPUT_DIR_NAME)
     ext = ext or ".mp4"
     return os.path.join(output_dir, f"{video_name}{suffix}{ext}")
 

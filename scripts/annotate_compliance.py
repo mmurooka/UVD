@@ -62,7 +62,7 @@ def parse_args():
     )
     parser.add_argument(
         "--render_suffix",
-        default=".annotated_compliance",
+        default=".compliance",
         help="Suffix added before the rendered video extension.",
     )
     parser.add_argument(
@@ -75,8 +75,11 @@ def parse_args():
 
 
 def resolve_output_paths(segment_yaml_path: Path, video_path: Path, render_suffix: str):
-    output_yaml_path = segment_yaml_path.with_name(f"{segment_yaml_path.stem}_compliance.yaml")
-    decision_json_path = output_yaml_path.with_suffix(f"{output_yaml_path.suffix}.json")
+    output_stem = segment_yaml_path.stem
+    if output_stem.endswith(".segments"):
+        output_stem = output_stem[: -len(".segments")]
+    output_yaml_path = segment_yaml_path.with_name(f"{output_stem}.compliance.yaml")
+    decision_json_path = output_yaml_path.with_suffix(".json")
     rendered_video_path = Path(rc.build_output_path(str(video_path), render_suffix))
     prompt_image_dir = output_yaml_path.with_name(f"{output_yaml_path.stem}_prompt_images")
     return output_yaml_path, decision_json_path, rendered_video_path, prompt_image_dir
