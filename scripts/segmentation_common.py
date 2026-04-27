@@ -63,9 +63,9 @@ class WindowMeanConfig:
 
 @dataclass(frozen=True)
 class KernelCpdConfig:
-    window: int = 30
+    window: int = 15
     gamma: float = 0.01
-    prominence: float = 0.4
+    prominence: float = 0.2
     min_segment_len: int = 10
 
 
