@@ -212,6 +212,12 @@ def ask_gpt_for_segment_annotation(
         "rpy: small orientation change of the end-effector\n"
         "posture: elbow or redundant arm motion\n"
         "\n"
+        "For posture:\n"
+        "Default posture compliance is usually acceptable.\n"
+        "Pay attention to the space around the elbow and upper arm, not only the end-effector.\n"
+        "If even small elbow or upper-arm motion could create unsafe collision risk with nearby objects or fixtures, posture compliance is not desirable.\n"
+        "If the elbow or arm itself (not just the end-effector) is directly supporting, contacting, or stabilizing something, posture compliance is also not desirable.\n"
+        "\n"
         f"Task description: {task_text}\n"
         f"Segment time range: {segment.start_sec:.3f} - {segment.end_sec:.3f} sec."
     )
